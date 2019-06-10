@@ -1,5 +1,18 @@
 package safetynet.accountmerger;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+
+import com.jsoniter.JsonIterator;
+import com.jsoniter.any.Any;
+import com.jsoniter.output.JsonStream;
+
 public class Main {
 	
 	/*
@@ -56,4 +69,38 @@ public class Main {
 		
     */
 
+    public static void main(String[] args) throws IOException {
+    	Path path = Paths.get("src/main/resources/accounts.json").toAbsolutePath();
+    	String json = new String(Files.readAllBytes(path));
+    	List<Any> accounts = JsonIterator.deserialize(json).asList();
+    	ArrayList<Account> accountList = new ArrayList();
+    	ArrayList usernameList = new ArrayList();
+        
+    	for(int i = 0; i < accounts.size(); i++) {
+    		String[] emails = accounts.get(i).get("emails").as(String[].class);
+    		HashSet emailsSet = new HashSet(Arrays.asList(emails));
+    		accountList.add(new Account(accounts.get(i).toString("application"), emailsSet, accounts.get(i).toString("name"))); 
+        }
+    	
+    	for(int i = 0; i < accounts.size(); i++) {
+    		String name = accounts.get(i).get("name").toString();
+    		String[] emails = accounts.get(i).get("emails").as(String[].class);
+    		for(int j = 0; j < accountList.size(); j++) {
+    			accountList.get(j).addToApplicationUsers(name, emails);
+    		}
+    	}
+        
+    	String outputJson = JsonStream.serialize(accountList);
+    	System.out.println(outputJson);
+    	
+    	// Also, I added the functionality from the next sprint; getting the command to open an application based on the user
+    	// This demonstrates it:
+    	System.out.println(accountList.get(0).getUserConfiguration(accountList.get(0).name));
+    	
+    	// And here is the basics for the application keys
+    	accountList.get(0).showApplicationKey();
+    }
+
+    
+ 
 }
