@@ -1,5 +1,22 @@
 package safetynet.accountmerger;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import com.jsoniter.JsonIterator;
+import com.jsoniter.any.Any;
+import com.jsoniter.output.JsonStream;
+
 public class Main {
 	
 	/*
@@ -56,4 +73,59 @@ public class Main {
 		
     */
 
+    public static void main(String[] args) throws IOException {
+        List<Any> accounts = loadAccountFile();
+        List<Account> accountList = accounts.stream().map(a -> anyToAccount(a)).collect(Collectors.toList());
+        Set<Person> personList = mergeAccounts(accountList);
+        String outputJson = JsonStream.serialize(personList);
+        System.out.println(outputJson);
+    }
+    
+    private static List<Any> loadAccountFile() throws IOException {
+        Path path = Paths.get("src/main/resources/accounts.json").toAbsolutePath();
+        String json = new String(Files.readAllBytes(path));
+        return JsonIterator.deserialize(json).asList();
+    }
+
+    private static Account anyToAccount(Any accountAny) {
+        String[] emails = accountAny.get("emails").as(String[].class);
+        Set<String> emailsSet = new HashSet<String>(Arrays.asList(emails));
+        return new Account(accountAny.toString("application"), emailsSet, accountAny.toString("name")); 
+    }
+    
+    private static Set<Person> mergeAccounts(List<Account> accountList) {
+        Map<UUID, Person> idPersonMap = new HashMap<>();
+        Map<String, UUID> emailIdMap = new HashMap<>();
+        for(Account account : accountList) {
+            Set<UUID> foundIds = new HashSet<>();
+            for(String email : account.getEmails()) {
+                if(emailIdMap.containsKey(email)) {
+                    foundIds.add(emailIdMap.get(email));
+                } 
+            }
+            
+            Person person = new Person(account.getApplication(), account.getEmails(), account.getName());
+            if(!foundIds.isEmpty()) {
+                mergeToSuperSetPerson(foundIds, idPersonMap, person, emailIdMap);
+            }
+            
+            person.getEmails().stream().forEach(email -> emailIdMap.put(email, person.getId()));
+            idPersonMap.put(person.getId(), person);
+        }
+        
+        return idPersonMap.values().stream().collect(Collectors.toSet());
+    }
+    
+    private static void mergeToSuperSetPerson(Set<UUID> ids, Map<UUID, Person> idPersonMap, Person superSetPerson, Map<String, UUID> emailIdMap) {
+        Set<Person> personsToCombine = ids.stream().map(id -> idPersonMap.get(id)).collect(Collectors.toSet());
+        ids.stream().forEach(idPersonMap::remove);
+        for(Person person : personsToCombine) {
+            person.getApplications().stream().forEach(superSetPerson::addApplication);
+            person.getEmails().stream().forEach(email -> {
+                superSetPerson.addEmail(email);
+                emailIdMap.remove(email);
+            });
+        }   
+    }
+ 
 }
